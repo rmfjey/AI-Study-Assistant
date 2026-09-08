@@ -1,6 +1,5 @@
-
 import streamlit as st
-import ollama
+from google import genai
 
 # Page settings
 st.set_page_config(
@@ -11,6 +10,13 @@ st.set_page_config(
 
 st.title("🎓 AI Learning & Study Assistant")
 st.caption("Your personal AI-powered study companion")
+
+# Gemini client
+try:
+    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+except Exception:
+    st.error("Gemini API key is not configured. Add GEMINI_API_KEY in Streamlit Cloud → Settings → Secrets.")
+    st.stop()
 
 # Chat history
 if "messages" not in st.session_state:
@@ -36,23 +42,30 @@ if prompt := st.chat_input("💬 Ask your study question..."):
     # AI response
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
+            try:
+                system_instruction = (
+                    "You are a helpful AI study assistant. "
+                    "Explain concepts clearly and simply for students. "
+                    "Give accurate and easy-to-understand answers."
+                )
 
-            response = ollama.chat(
-                model="llama3.2",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a helpful AI study assistant. "
-                            "Explain concepts clearly and simply for students. "
-                            "Give accurate and easy-to-understand answers."
-                        )
-                    }
-                ] + st.session_state.messages
-            )
+                conversation = []
+                for message in st.session_state.messages:
+                    conversation.append(
+                        f'{message["role"].upper()}: {message["content"]}'
+                    )
 
-            answer = response["message"]["content"]
-            st.markdown(answer)
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=system_instruction + "\n\n" + "\n".join(conversation)
+                )
+
+                answer = response.text
+                st.markdown(answer)
+
+            except Exception as e:
+                answer = "Sorry, I couldn't generate a response right now. Please check your Gemini API key and try again."
+                st.error(f"AI service error: {e}")
 
     # Save AI response
     st.session_state.messages.append({
